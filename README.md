@@ -40,7 +40,7 @@
 - simplekml
 
 ## usage
-'''python:usage
+~~~
 from RocketSimulator import RocketSimulator
 import pandas as pd
 
@@ -49,4 +49,4 @@ rs.initialize(design.loc[0], condition.loc[0])
 rs.simulate(method='RungeKutta', log=True)
 place = [["NOSHIRO_A", [40.138159, 139.984342]]
 rs.output_kml(place)
-'''
+~~~

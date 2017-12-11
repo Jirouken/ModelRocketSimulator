@@ -1,1 +1,2 @@
 # ModelRocketSimulator
+モデルロケットの設計データと打ち上げ条件から軌道を計算する．

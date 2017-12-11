@@ -167,173 +167,6 @@ class RocketSimulator(object):
 
         print("Altitude is " + str(max(p[:, 2])) + "[m].")
 
-    def deriv_mc(self, pi, vi, quai, omei, t, nw):
-        """ 運動方程式 """
-        qt = Quaternion()
-        # 機軸座標系の推力方向ベクトル
-        r_Ta = np.array([0., 0., 1.0])
-        # 慣性座標系重力加速度
-        gra = np.array([0., 0., -g])
-        # 機軸座標系の空力中心位置
-        r = np.array([0., 0., self.CG(t) - self.CP])
-        # 慣性座標系の推力方向ベクトル
-        r_T = qt.rotation(r_Ta, qt.coquat(quai))
-        r_T /= np.linalg.norm(r_T)
-        # 慣性テンソル
-        I = np.diag([self.Inertia(t), self.Inertia(t), self.Inertia_z(t)])
-        # 慣性テンソルの時間微分
-        I_dot = np.diag([self.Inertia_dot(t), self.Inertia_dot(t), self.Inertia_z_dot(t)])
-        # 慣性座標系対気速度
-        v_air = (1 + nw) * self.wind.wind(pi[2]) * self.wind_direction - vi
-        # 迎角
-        alpha = aoa.aoa(qt.rotation(v_air, quai))
-        # ランチロッド垂直抗力
-        N = 0
-        # ランチロッド進行中
-        if np.linalg.norm(pi) <= self.launch_rod and r_T[2] >= 0:
-            Mg_ = self.M(t) * gra - np.dot(self.M(t) * gra, r_T) * r_T
-            D_ = self.force.drag(alpha, v_air) - np.dot(self.force.drag(alpha, v_air), r_T) * r_T
-            N = -Mg_ - D_
-        # 慣性座標系加速度
-        v_dot = gra + (self.thrust(t) * r_T + self.force.drag(alpha, v_air) + N) / self.M(t)
-        # クォータニオンの導関数
-        qua_dot = qt.qua_dot(omei, quai)
-        # 機軸座標系角加速度
-        ome_dot = np.linalg.solve(I, - np.cross(r, qt.rotation(self.force.drag(alpha, v_air), quai))
-                                  - np.dot(I_dot, omei) - np.cross(omei, np.dot(I, omei)))
-        # ランチロッド進行中
-        if np.linalg.norm(pi) <= self.launch_rod:
-            # ランチロッド進行中は姿勢が一定なので角加速度0とする
-            ome_dot = np.array([0., 0., 0.])
-
-        return vi, v_dot, qua_dot, ome_dot
-
-    def simulate_mc(self, sd=0.1):
-        noise_w = np.random.randn(self.N) * sd
-        """ 数値計算 """
-        qt = Quaternion()
-        p = np.empty((self.N + 1, 3))
-        v = np.empty((self.N + 1, 3))
-        qua = np.empty((self.N + 1, 4))
-        ome = np.empty((self.N + 1, 3))
-        p[0] = self.p0
-        v[0] = self.v0
-        qua[0] = qt.product(self.qua_phi0, self.qua_theta0)
-        ome[0] = self.ome0
-        count = 0
-
-        for (i, t) in enumerate(self.time):
-            # Euler method
-            p_dot, v_dot, qua_dot, ome_dot = self.deriv_mc(p[i], v[i], qua[i], ome[i], t, noise_w[i])
-            p[i + 1] = p[i] + p_dot * self.dt
-            v[i + 1] = v[i] + v_dot * self.dt
-            qua[i + 1] = qua[i] + qua_dot * self.dt
-            ome[i + 1] = ome[i] + ome_dot * self.dt
-
-            if t <= self.force.burn_time:
-                p[i + 1][2] = max(0., p[i + 1][2])
-
-            # vz<0かつz<0のとき計算を中断
-            if v[i + 1][2] < 0 and p[i + 1][2] < 0:
-                count = i + 1
-                break
-
-        self.p = p[:count + 1]
-        self.v = v[:count + 1]
-        self.qua = qua[:count + 1]
-        self.ome = ome[:count + 1]
-
-    def falling_range(self, n=1000, sd=0.1):
-        falling_area = []
-        max_alttitude = []
-        for i in range(n):
-            self.simulate_mc(sd)
-            falling_area.append(self.p[-1])
-            max_alttitude.append(self.p[:, 2].max())
-            if (i + 1) % 10 == 0:
-                print(str((i+1)/10) + '%')
-        return np.array(falling_area), np.array(max_alttitude)
-
-    def deriv_odeint(self, X, t):
-        pi = X[:3]
-        vi = X[3:6]
-        quai = X[6:10]
-        omei = X[10:13]
-
-        if t <= self.force.burn_time:
-            pi[2] = max(0, pi[2])
-
-        """ 運動方程式 """
-        qt = Quaternion()
-        # 機軸座標系の推力方向ベクトル
-        r_Ta = np.array([0., 0., 1.0])
-        # 慣性座標系重力加速度
-        gra = np.array([0., 0., -g])
-        # 機軸座標系の空力中心位置
-        r = np.array([0., 0., self.CG(t) - self.CP])
-        # 慣性座標系の推力方向ベクトル
-        r_T = qt.rotation(r_Ta, qt.coquat(quai))
-        r_T /= np.linalg.norm(r_T)
-        # 慣性テンソル
-        I = np.diag([self.Inertia(t), self.Inertia(t), self.Inertia_z(t)])
-        # 慣性テンソルの時間微分
-        I_dot = np.diag([self.Inertia_dot(t), self.Inertia_dot(t), self.Inertia_z_dot(t)])
-        # 慣性座標系対気速度
-        v_air = self.wind.wind(pi[2]) * self.wind_direction - vi
-        # 迎角
-        alpha = aoa.aoa(qt.rotation(v_air, quai))
-        # ランチロッド垂直抗力
-        N = 0
-        # ランチロッド進行中
-        if np.linalg.norm(pi) <= self.launch_rod and r_T[2] >= 0:
-            Mg_ = self.M(t) * gra - np.dot(self.M(t) * gra, r_T) * r_T
-            D_ = self.force.drag(alpha, v_air) - np.dot(self.force.drag(alpha, v_air), r_T) * r_T
-            N = -Mg_ - D_
-        # 慣性座標系加速度
-        v_dot = gra + (self.thrust(t) * r_T + self.force.drag(alpha, v_air) + N) / self.M(t)
-        # クォータニオンの導関数
-        qua_dot = qt.qua_dot(omei, quai)
-        # 機軸座標系角加速度
-        ome_dot = np.linalg.solve(I, - np.cross(r, qt.rotation(self.force.drag(alpha, v_air), quai))
-                                  - np.dot(I_dot, omei) - np.cross(omei, np.dot(I, omei)))
-        # ランチロッド進行中
-        if np.linalg.norm(pi) <= self.launch_rod:
-            # ランチロッド進行中は姿勢が一定なので角加速度0とする
-            ome_dot = np.array([0., 0., 0.])
-
-        return np.r_[vi, v_dot, qua_dot, ome_dot]
-
-    def simulate_odeint(self, log=False):
-        """ 数値計算 """
-        qt = Quaternion()
-        qua0 = qt.product(self.qua_phi0, self.qua_theta0)
-        init = np.r_[self.p0, self.v0, qua0, self.ome0]
-
-        X = odeint(self.deriv_odeint, init, self.time)
-
-        p = X[:, :3]
-        v = X[:, 3:6]
-        qua = X[:, 6:10]
-        ome = X[:, 10:13]
-
-        # vz<0かつz<0のとき計算を中断
-        count = 0
-        for i in range(len(X)):
-            if v[i + 1][2] < 0 and p[i + 1][2] < 0:
-                count = i + 1
-                print("Calculation was successfully completed.")
-                break
-
-        self.p = p[:count + 1]
-        self.v = v[:count + 1]
-        self.qua = qua[:count + 1]
-        self.ome = ome[:count + 1]
-        if log:
-            np.savetxt(self.name + "_" + self.condition_name + "_position.csv", p, delimiter=",")
-            print("Position file was created.")
-
-        print("Altitude is " + str(max(p[:, 2])) + "[m].")
-
     def output_kml(self, place):
         # 原点からの距離
         def dis2d(x, y):
@@ -406,31 +239,21 @@ if __name__ == '__main__':
 
     rs = RocketSimulator()
     rs.initialize(design.loc[0], condition.loc[0])
-    fr, ma = rs.falling_range()
-    print(ma.mean(), ma.std())
-    plt.figure(figsize=(8, 8))
-    plt.scatter(fr[:, 0], fr[:, 1])
-    plt.xlabel('x', fontsize=20)
-    plt.ylabel('y', fontsize=20)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
-    plt.savefig('falling_range.png', dpi=200)
-    # rs.simulate(method='RungeKutta', log=True)
 
-    # places = [["NOSHIRO_A", [40.138159, 139.984342]],
-    #           ["Rits_Ground1", [34.977867, 135.963783]],
-    #           ["Kashiwa", [35.897433, 139.937890]]]
+    places = [["NOSHIRO_A", [40.138159, 139.984342]],
+              ["Rits_Ground1", [34.977867, 135.963783]],
+              ["Kashiwa", [35.897433, 139.937890]]]
 
-    # rs.output_kml(places[2])
+    rs.output_kml(places[2])
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot(rs.p[:, 0], rs.p[:, 1], rs.p[:, 2])
-    # ax.set_xlabel(u"x")
-    # ax.set_ylabel(u"y")
-    # ax.set_zlabel(u"z")
-    # ax.set_zlim([0., 250])
-    # plt.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(rs.p[:, 0], rs.p[:, 1], rs.p[:, 2])
+    ax.set_xlabel(u"x")
+    ax.set_ylabel(u"y")
+    ax.set_zlabel(u"z")
+    ax.set_zlim([0., 250])
+    plt.show()
 
     # plt.figure(figsize=(6, 8))
     # plt.plot(r2s.p[:, 1], r2s.p[:, 2])

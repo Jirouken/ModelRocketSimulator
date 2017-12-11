@@ -239,11 +239,11 @@ if __name__ == '__main__':
 
     rs = RocketSimulator()
     rs.initialize(design.loc[0], condition.loc[0])
-
+    rs.simulate(method='RungeKutta', log=True)
+    
     places = [["NOSHIRO_A", [40.138159, 139.984342]],
               ["Rits_Ground1", [34.977867, 135.963783]],
               ["Kashiwa", [35.897433, 139.937890]]]
-
     rs.output_kml(places[2])
 
     fig = plt.figure()

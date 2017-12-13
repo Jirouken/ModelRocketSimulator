@@ -44,9 +44,20 @@
 from RocketSimulator import RocketSimulator
 import pandas as pd
 
+# 設計データ読み込み
+design = pd.read_csv('design.csv')
+# 打ち上げ条件読み込み
+condition = pd.read_csv('condition.csv')
+
+# シミュレーション
 rs = RocketSimulator()
 rs.initialize(design.loc[0], condition.loc[0])
 rs.simulate(method='RungeKutta', log=True)
+
+# 到達高度
+print('Altitude: ', rs.p[:, 2].max())
+
+# Google Earth用ログ作成
 place = ["NOSHIRO_A", [40.138159, 139.984342]]
 rs.output_kml(place)
 ~~~

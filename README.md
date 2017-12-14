@@ -62,3 +62,6 @@ place = ["NOSHIRO_A", [40.138159, 139.984342]]
 rs.output_kml(place)
 ~~~
 作成されたログファイル「VESPER_NOSHIRO_A_condition1_path.kml」をGoogle Driveに保存しGoogle Earthからインポートすることで軌道を可視化できる．
+
+## reference
+[MatRockSim](https://github.com/ina111/MatRockSim)
